@@ -1,5 +1,5 @@
 use crate::{
-    client::{GCalClient, ClientError},
+    client::{ClientError, GCalClient},
     resources::{CalendarAccessRole, DefaultReminder, SendUpdates},
     sendable::{AdditionalProperties, QueryParams, Sendable},
 };
@@ -469,17 +469,15 @@ impl<C: HttpClient> EventClient<C> {
         let mut event = Event::default();
         event.id = Some(event_id);
         event.calendar_id = Some(calendar_id);
-        let resp = self.0.get(None, event).await?;
-
-        Ok(resp.json().await?)
+        let mut resp = self.0.get(None, event).await?;
+        Ok(resp.body_json().await?)
     }
 
     /// Import an event. See the Google Calendar documentation for the differences between import
     /// and insert.
     pub async fn import(&self, event: Event) -> Result<Event, ClientError> {
-        let resp = self.0.post(Some("import".to_string()), event).await?;
-
-        Ok(resp.json().await?)
+        let mut resp = self.0.post(Some("import".to_string()), event).await?;
+        Ok(resp.body_json().await?)
     }
 
     /// Insert an event. See the Google Calendar documentation for the differences between import
@@ -493,9 +491,9 @@ impl<C: HttpClient> EventClient<C> {
             }
         }
 
-        let resp = self.0.post(Some("import".to_string()), event).await?;
+        let mut resp = self.0.post(Some("import".to_string()), event).await?;
 
-        Ok(resp.json().await?)
+        Ok(resp.body_json().await?)
     }
 
     /// Retrieve all instances for a recurring event.
@@ -504,7 +502,7 @@ impl<C: HttpClient> EventClient<C> {
             .0
             .get(Some("instances".to_string()), event)
             .await?
-            .json()
+            .body_json()
             .await?)
     }
 
@@ -524,7 +522,13 @@ impl<C: HttpClient> EventClient<C> {
             .insert("timeMax".to_string(), end_time.to_rfc3339());
         event.calendar_id = Some(calendar_id);
 
-        Ok(self.0.get(None, event).await?.json::<Events>().await?.items)
+        Ok(self
+            .0
+            .get(None, event)
+            .await?
+            .body_json::<Events>()
+            .await?
+            .items)
     }
 
     /// Move event to another destination calendar_id.
@@ -555,12 +559,12 @@ impl<C: HttpClient> EventClient<C> {
             .0
             .post(Some("quickAdd".to_string()), event)
             .await?
-            .json()
+            .body_json()
             .await?)
     }
 
     /// Update an event.
     pub async fn update(&self, event: Event) -> Result<Event, ClientError> {
-        Ok(self.0.put(None, event).await?.json().await?)
+        Ok(self.0.put(None, event).await?.body_json().await?)
     }
 }

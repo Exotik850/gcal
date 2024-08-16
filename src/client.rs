@@ -1,7 +1,8 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
 use crate::sendable::Sendable;
-use http_client::{http_types::Headers, HttpClient};
+use http_client::{http_types::Headers, HttpClient, Request, Response};
+use serde_json::error;
 // use reqwest::{
 //     header::{HeaderMap, HeaderValue},
 //     ClientBuilder, RequestBuilder, Response,
@@ -10,10 +11,12 @@ use thiserror::Error;
 
 /// ClientError provides a mechanism to determine when the access token has expired. All other
 /// errors will be encapsulated by UnknownError.
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub enum ClientError {
     #[error("Invalid Access Token")]
     InvalidToken,
+    #[error("HTTP Error: {0}")]
+    HttpError(http_client::Error),
     #[error("Unknown Error: {0}")]
     UnknownError(String),
 }
@@ -42,6 +45,12 @@ impl From<url::ParseError> for ClientError {
     }
 }
 
+impl From<http_client::Error> for ClientError {
+    fn from(value: http_client::Error) -> Self {
+        Self::HttpError(value)
+    }
+}
+
 // impl From<reqwest::Error> for ClientError {
 //     fn from(value: reqwest::Error) -> Self {
 //         Self::UnknownError(value.to_string())
@@ -58,20 +67,31 @@ impl From<url::ParseError> for ClientError {
 /// negotiation should have already been completed. The client itself only implements HTTP verbs
 /// that accept Sendable implementations. You must use the decorated clients such as EventClient
 /// and CalendarListClient to do transactional work.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GCalClient<C> {
     // client: reqwest::Client,
-    client: C,
+    client: Arc<C>,
     access_key: String,
     headers: Option<Headers>,
     debug: bool,
+}
+
+impl<C> Clone for GCalClient<C> {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            access_key: self.access_key.clone(),
+            headers: self.headers.clone(),
+            debug: self.debug,
+        }
+    }
 }
 
 impl<C> GCalClient<C> {
     /// Create a new client. Requires an access key.
     pub fn new(client: C, access_key: String) -> Result<Self, ClientError> {
         Ok(Self {
-            client,
+            client: Arc::new(client),
             access_key,
             headers: None,
             debug: false,
@@ -82,9 +102,10 @@ impl<C> GCalClient<C> {
         self.debug = true
     }
 
-    // fn set_bearer(&self, req: RequestBuilder) -> RequestBuilder {
-    //     req.header("Authorization", format!("Bearer {}", self.access_key))
-    // }
+    fn set_bearer(&self, mut req: Request) -> Request {
+        req.insert_header("Authorization", format!("Bearer {}", self.access_key));
+        req
+    }
     fn get_url(
         &self,
         method: &str,
@@ -108,23 +129,26 @@ impl<C> GCalClient<C> {
 }
 
 impl<C: HttpClient> GCalClient<C> {
-    async fn send(&self, mut req: RequestBuilder) -> Result<Response, ClientError> {
-        if let Some(headers) = &self.headers {
-            req = req.headers(headers.clone())
+    async fn send(&self, mut req: Request) -> Result<Response, ClientError> {
+        for (name, val) in self.headers.iter().flatten() {
+            req.insert_header(name, val);
         }
-
-        let resp = self.set_bearer(req).send().await?;
+        req = self.set_bearer(req);
+        let resp = self
+            .client
+            .send(req)
+            .await
+            .map_err(|e| ClientError::UnknownError(e.to_string()))?;
         if resp.status() != 200 {
-            if let Some(header) = resp.headers().get("WWW-Authenticate") {
+            if let Some(header) = resp.header("WWW-Authenticate") {
                 if header
-                    .to_str()?
+                    .as_str()
                     .starts_with(r#"Bearer error="invalid_token""#)
                 {
                     return Err(ClientError::InvalidToken);
                 }
             }
-
-            Ok(resp.error_for_status()?)
+            Ok(resp)
         } else {
             Ok(resp)
         }
@@ -136,8 +160,9 @@ impl<C: HttpClient> GCalClient<C> {
         action: Option<String>,
         target: impl Sendable,
     ) -> Result<Response, ClientError> {
-        self.send(self.client.get(self.get_url("GET", &target, action)?))
-            .await
+        // self.client.get(self.get_url("GET", &target, action)?)
+        let req = Request::get(self.get_url("GET", &target, action)?);
+        self.send(req).await
     }
 
     /// Perform a POST request.
@@ -146,12 +171,9 @@ impl<C: HttpClient> GCalClient<C> {
         action: Option<String>,
         target: impl Sendable,
     ) -> Result<Response, ClientError> {
-        self.send(
-            self.client
-                .post(self.get_url("POST", &target, action)?)
-                .body(target.body_bytes()?),
-        )
-        .await
+        let mut req = Request::post(self.get_url("POST", &target, action)?);
+        req.set_body(target.body_bytes()?);
+        self.send(req).await
     }
 
     /// Perform a PUT request.
@@ -160,12 +182,9 @@ impl<C: HttpClient> GCalClient<C> {
         action: Option<String>,
         target: impl Sendable,
     ) -> Result<Response, ClientError> {
-        self.send(
-            self.client
-                .put(self.get_url("PUT", &target, action)?)
-                .body(target.body_bytes()?),
-        )
-        .await
+        let mut req = Request::put(self.get_url("PUT", &target, action)?);
+        req.set_body(target.body_bytes()?);
+        self.send(req).await
     }
 
     /// Perform a PATCH request.
@@ -174,12 +193,9 @@ impl<C: HttpClient> GCalClient<C> {
         action: Option<String>,
         target: impl Sendable,
     ) -> Result<Response, ClientError> {
-        self.send(
-            self.client
-                .patch(self.get_url("PATCH", &target, action)?)
-                .body(target.body_bytes()?),
-        )
-        .await
+        let mut req = Request::patch(self.get_url("PATCH", &target, action)?);
+        req.set_body(target.body_bytes()?);
+        self.send(req).await
     }
 
     /// Perform a DELETE request.
@@ -188,7 +204,7 @@ impl<C: HttpClient> GCalClient<C> {
         action: Option<String>,
         target: impl Sendable,
     ) -> Result<Response, ClientError> {
-        self.send(self.client.delete(self.get_url("DELETE", &target, action)?))
-            .await
+        let req = Request::delete(self.get_url("DELETE", &target, action)?);
+        self.send(req).await
     }
 }

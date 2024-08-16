@@ -17,7 +17,8 @@ use gcal::*;
 #[tokio::main]
 async fn main() {
     let access_key = easy_google_oauth::access_token().await;
-    let client = GCalClient::new(access_key).unwrap();
+    let http_client = http_client::h1::H1Client::new();
+    let client = GCalClient::new(http_client, access_key).unwrap();
     let calendar_list = CalendarListClient::new(client);
     let list = calendar_list.list(true, CalendarAccessRole::Reader).await.unwrap();
     for event in &list {

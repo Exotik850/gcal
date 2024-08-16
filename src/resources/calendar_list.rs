@@ -151,7 +151,7 @@ impl<C: HttpClient> CalendarListClient<C> {
             .0
             .get(None, cl)
             .await?
-            .json::<CalendarList>()
+            .body_json::<CalendarList>()
             .await?
             .items)
     }

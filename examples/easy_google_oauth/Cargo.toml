@@ -1,0 +1,10 @@
+[package]
+name = "easy_google_oauth"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oauth2 = "4.4.2"
+tokio = { version = "^1.31", features = ["full"] }
+reqwest = { version = "^0.11", features = [ "tokio-native-tls", "gzip", "json" ] }
+url = "^2"

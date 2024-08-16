@@ -29,8 +29,8 @@
 //!     }
 //! }
 //! ```
-use davisjr::prelude::*;
-use reqwest::{header::HeaderMap, ClientBuilder};
+// use davisjr::prelude::*;
+// use reqwest::{header::HeaderMap, ClientBuilder};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;

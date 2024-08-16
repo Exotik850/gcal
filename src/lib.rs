@@ -23,12 +23,12 @@
 
 /// Core client, used to construct other clients.
 pub mod client;
-pub mod oauth;
+// pub mod oauth;
 /// Resource clients and structures.
 pub mod resources;
 /// Sendable trait for constructing your own queries to Google Calendar through the client.
 pub mod sendable;
 
 pub use client::*;
-pub use oauth::*;
+// pub use oauth::*;
 pub use resources::*;

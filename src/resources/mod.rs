@@ -40,3 +40,20 @@ pub enum CalendarAccessRole {
     #[default]
     Owner,
 }
+
+impl CalendarAccessRole {
+    pub fn to_str(self) -> &'static str {
+        match self {
+            CalendarAccessRole::Owner => "owner",
+            CalendarAccessRole::Writer => "writer",
+            CalendarAccessRole::Reader => "reader",
+            CalendarAccessRole::FreeBusyReader => "freeBusyReader",
+        }
+    }
+}
+
+impl Into<String> for CalendarAccessRole {
+    fn into(self) -> String {
+        self.to_str().into()
+    }
+}

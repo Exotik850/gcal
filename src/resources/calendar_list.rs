@@ -1,7 +1,8 @@
-use crate::client::{Client, ClientError};
+use crate::client::{GCalClient, ClientError};
 use crate::resources::{CalendarAccessRole, ConferenceProperties};
 use crate::sendable::{QueryParams, Sendable};
 use crate::DefaultReminder;
+use http_client::HttpClient;
 use serde_derive::{Deserialize, Serialize};
 
 /*
@@ -10,7 +11,7 @@ use serde_derive::{Deserialize, Serialize};
 
 /// CalendarListClient is the method of accessing the calendar list. You must provide it with a
 /// Google Calendar client.
-pub struct CalendarListClient(Client);
+pub struct CalendarListClient<C>(GCalClient<C>);
 
 fn default_entry_kind() -> Option<String> {
     Some("calendar#calendarListEntry".to_string())
@@ -132,18 +133,19 @@ impl Sendable for CalendarList {
     }
 }
 
-impl CalendarListClient {
+impl<C: HttpClient> CalendarListClient<C> {
     /// Construct a CalendarListClient. Requires a Google Calendar Client.
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: GCalClient<C>) -> Self {
         Self(client)
     }
 
     /// List the calendars. Currently only returns the first page of results.
-    pub async fn list(&self) -> Result<Vec<CalendarListItem>, ClientError> {
+    pub async fn list(&self, hidden: bool, access_role: CalendarAccessRole) -> Result<Vec<CalendarListItem>, ClientError> {
         // FIXME get all the results lol
         let mut cl = CalendarList::default();
         cl.query_string
-            .insert("minAccessRole".to_string(), "owner".to_string());
+            .insert("minAccessRole".to_string(), access_role.into());
+        cl.query_string.insert("showHidden".to_string(), hidden.to_string());
 
         Ok(self
             .0

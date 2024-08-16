@@ -1,8 +1,9 @@
 use crate::{
-    client::{Client, ClientError},
+    client::{GCalClient, ClientError},
     resources::{CalendarAccessRole, DefaultReminder, SendUpdates},
     sendable::{AdditionalProperties, QueryParams, Sendable},
 };
+use http_client::HttpClient;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -24,7 +25,7 @@ fn default_true() -> Option<bool> {
 
 /// EventClient is the method of managing events from a specific calendar. Requires a Google
 /// Calendar client.
-pub struct EventClient(Client);
+pub struct EventClient<C>(GCalClient<C>);
 
 /// Events is a listing of events on a per-page basis.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -441,8 +442,8 @@ impl Sendable for Event {
             self.calendar_id.clone().unwrap(),
             self.id
                 .clone()
-                .map_or_else(|| String::new(), |x| format!("/{}", x)),
-            action.map_or_else(|| String::new(), |x| format!("/{}", x))
+                .map_or_else(String::new, |x| format!("/{}", x)),
+            action.map_or_else(String::new, |x| format!("/{}", x))
         )
     }
 
@@ -451,9 +452,9 @@ impl Sendable for Event {
     }
 }
 
-impl EventClient {
+impl<C: HttpClient> EventClient<C> {
     /// Construct a new EventClient. Requires a Google Calendar Client.
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: GCalClient<C>) -> Self {
         Self(client)
     }
 

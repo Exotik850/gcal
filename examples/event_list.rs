@@ -7,7 +7,7 @@ async fn main() {
     let access_key = easy_google_oauth::access_token(&http_client).await;
     let client = GCalClient::new(http_client, access_key).unwrap();
     let calendar_list = CalendarListClient::new(client.clone());
-    let mut list = calendar_list
+    let list = calendar_list
         .list(true, CalendarAccessRole::Reader)
         .await
         .unwrap();
@@ -16,11 +16,15 @@ async fn main() {
     let end = Local::now()
         .checked_add_signed(chrono::Duration::days(7))
         .unwrap();
-    let list = events
-        .list(list.swap_remove(0).id, start, end)
-        .await
-        .unwrap();
-    for event in &list {
+    let mut event_list = Vec::new();
+    for calendar in list {
+        let events = events
+            .list(calendar.id, start, end)
+            .await
+            .unwrap();
+        event_list.extend(events);
+    }
+    for event in &event_list {
         eprintln!("{:?} {:?}", event.id, event.summary);
     }
 }

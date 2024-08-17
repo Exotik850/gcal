@@ -29,7 +29,7 @@ pub struct EventClient<C>(GCalClient<C>);
 
 /// Events is a listing of events on a per-page basis.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Events {
     #[serde(default = "default_events_kind")]
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -109,6 +109,12 @@ pub async fn access_token(http_client: &impl HttpClient) -> String {
 
         (code, state)
     };
+
+    // Ensure the `state` in the response matches the `state` in the request.
+    if csrf_state.secret() != state.secret() {
+        panic!("CSRF token mismatch");
+    }
+
     // Exchange the code with a token.
     let token_response = client
         .exchange_code(code)

@@ -1,4 +1,4 @@
-use crate::client::{GCalClient, ClientError};
+use crate::client::{ClientError, GCalClient};
 use crate::resources::{CalendarAccessRole, ConferenceProperties};
 use crate::sendable::{QueryParams, Sendable};
 use crate::DefaultReminder;
@@ -140,12 +140,17 @@ impl<C: HttpClient> CalendarListClient<C> {
     }
 
     /// List the calendars. Currently only returns the first page of results.
-    pub async fn list(&self, hidden: bool, access_role: CalendarAccessRole) -> Result<Vec<CalendarListItem>, ClientError> {
+    pub async fn list(
+        &self,
+        hidden: bool,
+        access_role: CalendarAccessRole,
+    ) -> Result<Vec<CalendarListItem>, ClientError> {
         // FIXME get all the results lol
         let mut cl = CalendarList::default();
         cl.query_string
             .insert("minAccessRole".to_string(), access_role.into());
-        cl.query_string.insert("showHidden".to_string(), hidden.to_string());
+        cl.query_string
+            .insert("showHidden".to_string(), hidden.to_string());
 
         Ok(self
             .0

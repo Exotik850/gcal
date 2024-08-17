@@ -1,3 +1,4 @@
+use http_client::{HttpClient, Request};
 use oauth2::http::Error;
 use oauth2::reqwest::http_client;
 use oauth2::{basic::BasicClient, StandardRevocableToken, TokenResponse};
@@ -11,9 +12,9 @@ use std::env;
 // use std::error::Error;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
+use std::str::FromStr;
 
-
-pub async fn access_token() -> String {
+pub async fn access_token(http_client: &impl HttpClient) -> String {
     let google_client_id = ClientId::new(
         env::var("GOOGLE_CLIENT_ID").expect("Missing the GOOGLE_CLIENT_ID environment variable."),
     );
@@ -44,11 +45,11 @@ pub async fn access_token() -> String {
             .expect("Invalid revocation endpoint URL"),
     );
 
-    let http_client = reqwest::ClientBuilder::new()
-        // Following redirects opens the client up to SSRF vulnerabilities.
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("Client should build");
+    // let http_client = reqwest::ClientBuilder::new()
+    //     // Following redirects opens the client up to SSRF vulnerabilities.
+    //     .redirect(reqwest::redirect::Policy::none())
+    //     .build()
+    //     .expect("Client should build");
 
     // Google supports Proof Key for Code Exchange (PKCE - https://oauth.net/2/pkce/).
     // Create a PKCE code verifier and SHA-256 encode it as a code challenge.
@@ -108,31 +109,47 @@ pub async fn access_token() -> String {
 
         (code, state)
     };
-
-    println!("Google returned the following code:\n{}\n", code.secret());
-    println!(
-        "Google returned the following state:\n{} (expected `{}`)\n",
-        state.secret(),
-        csrf_state.secret()
-    );
-
-    let cl = http_client.clone();
     // Exchange the code with a token.
     let token_response = client
         .exchange_code(code)
         .set_pkce_verifier(pkce_code_verifier)
         .request_async(move |request| async move {
-            let mut request_builder = cl
-                .request(request.method, request.url.as_str())
-                .body(request.body);
-
+            let mut req = Request::new(
+                match request.method {
+                    oauth2::http::Method::GET => http_client::http_types::Method::Get,
+                    oauth2::http::Method::POST => http_client::http_types::Method::Post,
+                    oauth2::http::Method::PUT => http_client::http_types::Method::Put,
+                    oauth2::http::Method::DELETE => http_client::http_types::Method::Delete,
+                    oauth2::http::Method::HEAD => http_client::http_types::Method::Head,
+                    oauth2::http::Method::OPTIONS => http_client::http_types::Method::Options,
+                    oauth2::http::Method::CONNECT => http_client::http_types::Method::Connect,
+                    oauth2::http::Method::PATCH => http_client::http_types::Method::Patch,
+                    oauth2::http::Method::TRACE => http_client::http_types::Method::Trace,
+                    _ => http_client::http_types::Method::Get,
+                },
+                request.url.as_str(),
+            ); // TODO: handle other methods
+            req.set_body(request.body);
             for (name, value) in &request.headers {
-                request_builder = request_builder.header(name.as_str(), value.as_bytes());
+                let Ok(values) = value.to_str() else {
+                    eprintln!("Failed to convert header value to string: {:?}", value);
+                    continue;
+                };
+                req.insert_header(name.as_str(), values); // TODO Allow values that have not ASCII characters
             }
-            let response = cl.execute(request_builder.build().unwrap()).await.unwrap();
-            let status_code = response.status();
-            let headers = response.headers().to_owned();
-            let body = response.bytes().await.unwrap().to_vec();
+            let mut response = http_client.send(req).await.unwrap();
+            let status_code = oauth2::http::StatusCode::from_u16(response.status() as u16)
+                .expect("Should be a valid status code!");
+            let body = response.take_body().into_bytes().await.unwrap();
+            let headers = response
+                .into_iter()
+                .map(|(name, value)| {
+                    (
+                        oauth2::http::header::HeaderName::from_str(name.as_str()).unwrap(),
+                        oauth2::http::header::HeaderValue::from_str(value.as_str()).unwrap(),
+                    )
+                })
+                .collect();
             Ok::<_, Error>(oauth2::HttpResponse {
                 status_code,
                 headers,

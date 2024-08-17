@@ -52,8 +52,8 @@ impl CalendarAccessRole {
     }
 }
 
-impl Into<String> for CalendarAccessRole {
-    fn into(self) -> String {
-        self.to_str().into()
+impl From<CalendarAccessRole> for String {
+    fn from(val: CalendarAccessRole) -> Self {
+        val.to_str().into()
     }
 }

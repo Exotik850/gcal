@@ -16,11 +16,14 @@ use gcal::*;
 
 #[tokio::main]
 async fn main() {
-    let access_key = easy_google_oauth::access_token().await;
     let http_client = http_client::h1::H1Client::new();
+    let access_key = easy_google_oauth::access_token(&http_client).await;
     let client = GCalClient::new(http_client, access_key).unwrap();
     let calendar_list = CalendarListClient::new(client);
-    let list = calendar_list.list(true, CalendarAccessRole::Reader).await.unwrap();
+    let list = calendar_list
+        .list(true, CalendarAccessRole::Reader)
+        .await
+        .unwrap();
     for event in &list {
         eprintln!("{} {}", event.id, event.summary);
     }

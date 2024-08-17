@@ -1,8 +1,7 @@
-use std::{rc::Rc, sync::Arc};
+use std::{sync::Arc};
 
 use crate::sendable::Sendable;
 use http_client::{http_types::Headers, HttpClient, Request, Response};
-use serde_json::error;
 // use reqwest::{
 //     header::{HeaderMap, HeaderValue},
 //     ClientBuilder, RequestBuilder, Response,
@@ -102,10 +101,10 @@ impl<C> GCalClient<C> {
         self.debug = true
     }
 
-    fn set_bearer(&self, mut req: Request) -> Request {
+    fn set_bearer(&self, req: &mut Request) {
         req.insert_header("Authorization", format!("Bearer {}", self.access_key));
-        req
     }
+
     fn get_url(
         &self,
         method: &str,
@@ -133,12 +132,8 @@ impl<C: HttpClient> GCalClient<C> {
         for (name, val) in self.headers.iter().flatten() {
             req.insert_header(name, val);
         }
-        req = self.set_bearer(req);
-        let resp = self
-            .client
-            .send(req)
-            .await
-            .map_err(|e| ClientError::UnknownError(e.to_string()))?;
+        self.set_bearer(&mut req);
+        let resp = self.client.send(req).await?;
         if resp.status() != 200 {
             if let Some(header) = resp.header("WWW-Authenticate") {
                 if header
